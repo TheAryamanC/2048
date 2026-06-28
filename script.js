@@ -13,6 +13,10 @@ function setupInput() {
 }
 
 async function handleInput(e) {
+  const oldTiles = new Set(
+    grid.cells.filter(cell => cell.tile != null).map(cell => cell.tile)
+  )
+
   switch (e.key) {
     case "ArrowUp":
       if (!canMoveUp()) {
@@ -48,6 +52,29 @@ async function handleInput(e) {
   }
 
   grid.cells.forEach(cell => cell.mergeTiles())
+
+  for (const cell of grid.cells) {
+    const tile = cell.tile
+    if (!tile) continue
+    if (!oldTiles.has(tile)) continue
+    if (tile.isMergedThisTurn) continue
+
+    tile.decayCounter--
+    if (tile.decayCounter <= 0) {
+      if (tile.value === 2) {
+        cell.lead = true
+        tile.remove()
+        cell.tile = null
+      } else {
+        tile.value = Math.floor(tile.value / 2)
+        tile.decayCounter = 2 * tile.value
+      }
+    }
+  }
+
+  grid.cells.forEach(cell => {
+    if (cell.tile) cell.tile.isMergedThisTurn = false
+  })
 
   const newTile = new Tile(gameBoard)
   grid.randomEmptyCell().tile = newTile
@@ -85,6 +112,7 @@ function slideTiles(cells) {
       for (let i = 1; i < group.length; i++) {
         const cell = group[i]
         if (cell.tile == null) continue
+
         let lastValidCell
         for (let j = i - 1; j >= 0; j--) {
           const moveToCell = group[j]
@@ -94,7 +122,13 @@ function slideTiles(cells) {
 
         if (lastValidCell != null) {
           promises.push(cell.tile.waitForTransition())
-          if (lastValidCell.tile != null) {
+
+          if (lastValidCell.lead) {
+            lastValidCell.lead = false
+            cell.tile.decayCounter = 2 * cell.tile.value
+            cell.tile.isMergedThisTurn = true
+            lastValidCell.tile = cell.tile
+          } else if (lastValidCell.tile != null) {
             lastValidCell.mergeTile = cell.tile
           } else {
             lastValidCell.tile = cell.tile
